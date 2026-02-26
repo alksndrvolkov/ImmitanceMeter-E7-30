@@ -1,7 +1,7 @@
 import time
 from E7_30_ImmittanceMeter import ImmittanceMeter
 
-meter = ImmitanceMeter("COM2", 0.2)
+meter = ImmittanceMeter("COM2", 0.2)
 
 frequency_list = [100,2000,33000, 3000000] # сканируемые частоты в Гц
 
@@ -16,3 +16,4 @@ for frequency in frequency_list:
 
 
 meter.close_serial()
+

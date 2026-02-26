@@ -1,5 +1,5 @@
 import time
-from E7_30_ImmittanceMeter import ImmitanceMeter
+from E7_30_ImmittanceMeter import ImmittanceMeter
 
 meter = ImmitanceMeter("COM2", 0.2)
 
@@ -13,5 +13,6 @@ for frequency in frequency_list:
     print("Impedance module: ", impedance_module, " Ω")
     print("Impedance phase: ", impedance_phase, " °")
     print("")
+
 
 meter.close_serial()

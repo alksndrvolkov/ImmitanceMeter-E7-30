@@ -11,7 +11,8 @@ class ImmittanceMeter:
         self.COM_PORT = COM_PORT
         self.COM_timeout = COM_timeout
         self.frame_timeout = frame_timeout
-
+        self.update_time = 0
+        self.measurements_rate = "Fast"
         ser = serial.Serial(
             port=self.COM_PORT,
             baudrate=9600,
@@ -22,11 +23,32 @@ class ImmittanceMeter:
             inter_byte_timeout=0.3,
             write_timeout=1.0
         )
-        self.serial_port = ser
-        time.sleep(2)
+        self._ser = ser
+        self.find_update_time()
 
     def close_serial(self):
-        self.serial_port.close()
+        self._ser.close()
+
+    def test_update_time(self, update_time):
+        self.update_time = update_time
+        self.set_frequency(25)
+        response = self.read_impedance()
+        if response is not None:
+            return True
+        else:
+            return False
+
+    def find_update_time(self):
+        fast_measurement_time = 0.3
+        middle_measurement_time = 1
+        measurement_tries = 3
+
+        if any([self.test_update_time(fast_measurement_time) for _ in range(measurement_tries)]):
+            self.measurements_rate = "Fast"
+        elif any([self.test_update_time(middle_measurement_time) for _ in range(measurement_tries)]):
+            self.measurements_rate = "Middle"
+        else:
+            raise ConnectionError("Update time not found.")
 
     # ask device name
     def identity(self):
@@ -39,11 +61,9 @@ class ImmittanceMeter:
         frequency_bytes = frequency.to_bytes(4, "big", signed=False)
         cmd = bytes([0xAA, 0x43]) + frequency_bytes
 
-        self.serial_port.write(cmd)
-        self.serial_port.flush()
-        time.sleep(0.3)
-        return True
-
+        self._ser.write(cmd)
+        self._ser.flush()
+        time.sleep(self.update_time)
 
     def set_bias_voltage(self, bias_voltage: float):
 
@@ -60,13 +80,14 @@ class ImmittanceMeter:
 
         cmd = bytes([0xAA, 0x46]) + bias_voltage_bytes
 
-        self.serial_port.write(cmd)
-        self.serial_port.flush()
-        time.sleep(0.3)
-        return True
+        self._ser.write(cmd)
+        self._ser.flush()
+        time.sleep(self.update_time)
 
     @staticmethod
     def parse_frame(frame):
+        if len(frame) < 18:
+            raise ValueError("Wrong frame. Reading error.")
         # Два 32-битных float big-endian: |Z| и φ (рад)
         z_mag = struct.unpack('>f', frame[12:16])[0]
         phi_rad = struct.unpack('>f', frame[16:20])[0]
@@ -74,23 +95,22 @@ class ImmittanceMeter:
         return z_mag, phi_deg
 
     def read_impedance(self):
-        #self.serial_port.reset_input_buffer()
+        #self._ser.reset_input_buffer()
         cmd = bytes([0xAA, 0x48])
-        self.serial_port.write(cmd)
-        self.serial_port.flush()
-        time.sleep(0.3)
+        self._ser.write(cmd)
+        self._ser.flush()
+        time.sleep(self.update_time)
 
         start_time = time.monotonic()
         while time.monotonic() - start_time < self.frame_timeout:
-            current_byte = self.serial_port.read(1)
+            current_byte = self._ser.read(1)
             #print("Current byte1: ", current_byte)
             if current_byte == bytes([0xAA]):
-                current_byte = self.serial_port.read(1)
+                current_byte = self._ser.read(1)
                 #print("Current byte2: ", current_byte)
                 if current_byte == bytes([0x48]):
-                    frame = bytes([0xAA, 0x48]) + self.serial_port.read(18)
+                    frame = bytes([0xAA, 0x48]) + self._ser.read(18)
                     #print(frame)
                     if len(frame) == 20:
                         return self.parse_frame(frame)
         return None # Если не нашёлся кадр с данными.
-
